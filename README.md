@@ -12,3 +12,5 @@
 # Main_code_Cpu1_Vehicle：車両搭載用，大会で使用したものになる
 # VariableResistor_test：APPSの初期値を設定するためのコード，今の車両ardunioにpcから給電（usb）すれば確認できる，つまりGLVMSは入れる必要がない
 # VariableResistor_test_brake：ブレーキの初期値を確認するためのコード，今の車両はBSPD基盤からセンサーに給電しているため，使うにはGLVMSを入れる必要がある
+
+2024/9  大会のプログラム変更：YFR_main_code_ver3
