@@ -9,6 +9,15 @@ YFR_sub_code_1
 ・異常信号
 ・冷却水温度
 ・加速度
+
+Edit History
+2024/4  青木タケミチ　元コード作成
+2024/9/26  グエンコンフィ
+            ・保存形式を.csvに変更
+            ・CAN.csv, tem.csvをsetup()で作る仕様に変更。つまりarduino起動時やprogram初期化で新しいcsvファイルを作成
+            ・ファイル名をCAN_0.csv, CAN_1.csvのように連番で作る。本当は"20240926_1030_CAN_0.csv"のように時刻をファイル名としたいが、
+            　arduino自体に時刻を取得する機能がないため、外部モジュールが必要となる。
+            ・コメント：ロゴのバイナリデータはヘッダーとかにまとめてくれ！！、関数はプロトタイプ宣言か別のヘッダーにまとめてくれ！！
 */
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -35,8 +44,8 @@ YFR_sub_code_1
 MCP_CAN CAN(9);  //Can通信
 
 File myFile;
-char fileName_can[20];  // ファイル名用の文字列バッファ
-char fileName_tem[20];  // ファイル名用の文字列バッファ
+char fileName_can[30];  // ファイル名用の文字列バッファ
+char fileName_tem[30];  // ファイル名用の文字列バッファ
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET 4  // Reset pin # (or -1 if sharing Arduino reset pin)
@@ -234,14 +243,39 @@ void displayRange(void)  //ADXL
   Serial.println(" g");
 }
 
-// ファイル名が重複しないように、連番を付ける関数
-void createUniqueFileName(const int& startIndex, const String& basename, char* filename) {
+// csvファイルを最初に作る関数
+bool creatCSVfile(const int startIndex, const String& basename, char* filename, const int flag) {
+  /*　引数
+  // startIndex : 連番の始まり、0でもいいし、すでに５まで存在するなら６とかにしても良い
+  // basename  : ファイル名種類、例）”CAN”、”tem”
+  // filename  :  myFile操作用のファイル名、例えば”CAN_1.csv”、グローバル変数として定義しているのでsetupで一度確定するとloopでずっと同じものに書き込む、クラスでまとめても良い
+  // flag  :  ファイルの種類を指す番号、ここでは 1:CAN,  2:tem としている
+  */
   int fileIndex = startIndex;
   // "CAN_0.csv", "CAN_1.csv" などの連番を生成し、ファイルが存在しない名前を探す
   do {
-    sprintf(filename, "%s_%d.csv",basename.c_str(), fileIndex);
+    sprintf(filename, "%s_%d.csv", basename.c_str(), fileIndex);
     fileIndex++;
   } while (SD.exists(filename));  // ファイルが存在する限り、ループで次の番号を試す
+
+  // ファイルを開く（新規作成）
+  myFile = SD.open(fileName_can, FILE_WRITE);
+  if (!myFile) { return false; }
+
+  // ヘッダーを書き込む
+  switch (flag) {
+    case 1:  // CAN.csv
+      myFile.println("Status,Revolution[rpm],Speed[m/s],Voltage[V],Current[Arms],Error");
+      break;
+    case 2:  // tem.csv
+      myFile.println("Temperature[C]");
+      break;
+    default:
+      break;
+  }
+
+  myFile.close();
+  return true;
 }
 
 void setup() {
@@ -284,16 +318,19 @@ void setup() {
   }
   // 最初のファイル名を設定 (例: CAN_0.csv)
   int fileIndex = 0;  // 最初のファイル番号
-  createUniqueFileName(fileIndex);
 
-  // ファイルを開く（新規作成）
-  myFile = SD.open(fileName_can, FILE_WRITE);
-  if (myFile) {
-    // ヘッダーを書き込む
-    myFile.println("Status,Revolution[rpm],Speed[m/s],Voltage[V],Current[Arms],Error");
-    myFile.close();
+  // CANファイルを作成
+  if (createCSVfile(fileIndex, "CAN", fileName_can, 1)) {
+    Serial.println("CAN file created successfully.");
   } else {
-    Serial.println("Error creating file!");
+    Serial.println("Failed to create CAN file.");
+  }
+
+  // TEMファイルを作成
+  if (createCSVfile(fileIndex, "tem", fileName_tem, 2)) {
+    Serial.println("TEM file created successfully.");
+  } else {
+    Serial.println("Failed to create TEM file.");
   }
 
   Serial.println("initialization done.");
@@ -394,13 +431,10 @@ void loop() {
   }
 
   ////SDカードにCANのデータを記録(CAN.csv)
-  myFile = SD.open("CAN.csv", FILE_WRITE);
+  myFile = SD.open(fileName_can, FILE_WRITE);
 
   if (myFile) {
-    Serial.print("Writing to test.txt...");
-
-    // ヘッダー
-    myFile.println("Status,Revolution[rpm],Speed[m/s],Voltage[V],Current[Arms],Error");
+    Serial.print("Writing to test.csv...");
 
     //制御状態
 
@@ -432,7 +466,7 @@ void loop() {
     myFile.print(",");
 
     //モーター相電流
-    mmyFile.print(Motor_cur);
+    myFile.print(Motor_cur);
     myFile.print(",");
 
     //異常信号
@@ -472,13 +506,10 @@ void loop() {
   short tem;
   tem = sensors.getTempCByIndex(0);
   //SDカードに冷却水温度を記録(tem.txt)
-  myFile = SD.open("tem.csv", FILE_WRITE);
+  myFile = SD.open(fileName_tem, FILE_WRITE);
 
   if (myFile) {
     Serial.print("Writing to tem.csv...");
-
-    // ヘッダー
-    myFile.println("tem");
 
     // 記録
     myFile.print(tem);
